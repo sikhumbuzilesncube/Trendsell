@@ -225,6 +225,53 @@ export default function SellerDashboard() {
           )}
         </div>
 
+        {/* AI Feature - Highlighted for Unlimited Plan */}
+        <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl shadow-lg p-6 mb-6 border-2 border-purple-300">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="text-4xl">🤖</div>
+              <h3 className="font-bold text-xl text-purple-800">AI Power Tools</h3>
+            </div>
+            {subscription && subscription.plan === 'unlimited_20' ? (
+              <span className="bg-purple-600 text-white text-xs px-4 py-2 rounded-full font-bold">
+                ✅ ACTIVE
+              </span>
+            ) : (
+              <span className="bg-gray-300 text-gray-600 text-xs px-4 py-2 rounded-full">
+                🔒 Upgrade to Unlock
+              </span>
+            )}
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="bg-white rounded-lg p-4 shadow">
+              <div className="text-2xl mb-2">🔄</div>
+              <h4 className="font-bold text-purple-700">Auto-Add Products</h4>
+              <p className="text-sm text-gray-600">AI finds trending products and adds them to your store automatically</p>
+            </div>
+            <div className="bg-white rounded-lg p-4 shadow border-2 border-purple-300">
+              <div className="text-2xl mb-2">📱</div>
+              <h4 className="font-bold text-purple-700">Auto-Social Sharing</h4>
+              <p className="text-sm text-gray-600">New products are automatically shared to WhatsApp, Facebook & more</p>
+            </div>
+            <div className="bg-white rounded-lg p-4 shadow">
+              <div className="text-2xl mb-2">📈</div>
+              <h4 className="font-bold text-purple-700">Smart Analytics</h4>
+              <p className="text-sm text-gray-600">AI analyzes sales data to recommend best-performing products</p>
+            </div>
+          </div>
+          
+          {subscription && subscription.plan !== 'unlimited_20' && (
+            <div className="mt-4 bg-purple-200 rounded-lg p-3 border border-purple-300">
+              <p className="text-sm text-purple-800">
+                🚀 <Link href="/dashboard/seller/subscribe" className="font-bold hover:underline">
+                  Upgrade to Unlimited ($20/mo)
+                </Link> to unlock AI automation and grow your sales automatically!
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="grid md:grid-cols-3 gap-6">
           <Link href="/dashboard/seller/products" className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition border-2 border-transparent hover:border-amber-300">
             <div className="text-4xl mb-3">🛒</div>
@@ -266,4 +313,4 @@ export default function SellerDashboard() {
       </div>
     </div>
   )
-                                         }
+        }
