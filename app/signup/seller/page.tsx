@@ -22,6 +22,7 @@ export default function SellerSignup() {
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
 
   const banks = [
     'CBZ', 'NMB', 'Stanbic', 'Standard Chartered', 
@@ -44,7 +45,7 @@ export default function SellerSignup() {
     }
 
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
@@ -58,31 +59,67 @@ export default function SellerSignup() {
         }
       })
 
-      if (error) throw error
+      if (authError) throw authError
+
+      if (!authData.user) {
+        throw new Error('User creation failed')
+      }
 
       const { error: dbError } = await supabase
         .from('users')
         .insert({
-          id: data.user?.id,
+          id: authData.user.id,
           email: formData.email,
           name: formData.name,
           surname: formData.surname,
           store_name: formData.storeName,
           phone: formData.phone,
           role: 'seller',
-          verified: false
+          verified: false,
+          created_at: new Date().toISOString()
         })
 
       if (dbError) throw dbError
 
-      alert('Account created! Check your email to verify. Start your 14-day free trial!')
-      window.location.href = '/dashboard/seller'
-      
+      // Create subscription for 14-day trial
+      const { error: subError } = await supabase
+        .from('subscriptions')
+        .insert({
+          seller_id: authData.user.id,
+          plan: 'free_trial',
+          max_products: 5,
+          start_date: new Date().toISOString(),
+          end_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          active: true
+        })
+
+      if (subError) throw subError
+
+      setSuccess(true)
+      setTimeout(() => {
+        window.location.href = '/dashboard/seller'
+      }, 2000)
+
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message || 'An error occurred during signup')
     } finally {
       setLoading(false)
     }
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
+        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg text-center">
+          <div className="text-6xl mb-4">🎉</div>
+          <h2 className="text-2xl font-bold text-amber-700 mb-2">Free Trial Started!</h2>
+          <p className="text-gray-600 mb-4">
+            Your 14-day free trial has begun. Check your email to verify your account.
+          </p>
+          <p className="text-sm text-gray-500">Redirecting to dashboard...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -283,4 +320,4 @@ export default function SellerSignup() {
       </div>
     </div>
   )
-          }
+    }
