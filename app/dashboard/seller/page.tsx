@@ -28,17 +28,25 @@ export default function SellerDashboard() {
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [loading, setLoading] = useState(true)
   const [productCount, setProductCount] = useState(0)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setError(null)
+        
+        // Get current user
         const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
         
         if (authError || !authUser) {
+          console.error('Auth error:', authError)
           window.location.href = '/auth/login'
           return
         }
 
+        console.log('Auth user ID:', authUser.id)
+
+        // Get user profile
         const { data: userData, error: userError } = await supabase
           .from('users')
           .select('*')
@@ -49,8 +57,10 @@ export default function SellerDashboard() {
           console.error('User error:', userError)
         } else if (userData) {
           setUser(userData)
+          console.log('User data:', userData)
         }
 
+        // Get subscription - with better error handling
         const { data: subData, error: subError } = await supabase
           .from('subscriptions')
           .select('*')
@@ -59,10 +69,37 @@ export default function SellerDashboard() {
 
         if (subError) {
           console.error('Subscription error:', subError)
+          setError('Could not load subscription data')
         } else if (subData) {
           setSubscription(subData)
+          console.log('Subscription data:', subData)
+        } else {
+          console.log('No subscription found - creating default')
+          // Create default subscription if none exists
+          const defaultSub = {
+            seller_id: authUser.id,
+            plan: 'free_trial',
+            max_products: 5,
+            start_date: new Date().toISOString(),
+            end_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+            active: true
+          }
+          
+          const { data: newSub, error: createError } = await supabase
+            .from('subscriptions')
+            .insert(defaultSub)
+            .select()
+            .single()
+            
+          if (createError) {
+            console.error('Error creating subscription:', createError)
+          } else if (newSub) {
+            setSubscription(newSub)
+            console.log('Created default subscription:', newSub)
+          }
         }
 
+        // Count products in store
         const { count, error: countError } = await supabase
           .from('seller_products')
           .select('*', { count: 'exact', head: true })
@@ -70,10 +107,12 @@ export default function SellerDashboard() {
 
         if (!countError && count !== null) {
           setProductCount(count)
+          console.log('Product count:', count)
         }
 
       } catch (error) {
         console.error('Error fetching data:', error)
+        setError('An unexpected error occurred')
       } finally {
         setLoading(false)
       }
@@ -114,20 +153,28 @@ export default function SellerDashboard() {
   // Calculate trial days left
   let daysLeft = 0
   let trialEndDate = null
-  if (subscription && subscription.end_date) {
-    const end = new Date(subscription.end_date)
-    const now = new Date()
-    daysLeft = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    trialEndDate = end.toLocaleDateString('en-US', { 
-      month: 'long', 
-      day: 'numeric', 
-      year: 'numeric' 
-    })
+  let isFreeTrial = false
+  let isUnlimited = false
+  
+  if (subscription) {
+    isFreeTrial = subscription.plan === 'free_trial'
+    isUnlimited = subscription.plan === 'unlimited_20'
+    
+    if (subscription.end_date) {
+      const end = new Date(subscription.end_date)
+      const now = new Date()
+      daysLeft = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      trialEndDate = end.toLocaleDateString('en-US', { 
+        month: 'long', 
+        day: 'numeric', 
+        year: 'numeric' 
+      })
+    }
   }
 
   const getPlanName = (plan: string) => {
     const plans: { [key: string]: string } = {
-      'free_trial': 'Free Trial',
+      'free_trial': 'Free Trial (14 days)',
       'basic_5': 'Basic ($5/mo)',
       'pro_10': 'Pro ($10/mo)',
       'unlimited_20': 'Unlimited ($20/mo)'
@@ -135,8 +182,7 @@ export default function SellerDashboard() {
     return plans[plan] || plan
   }
 
-  const isUnlimited = subscription?.plan === 'unlimited_20'
-  const isFreeTrial = subscription?.plan === 'free_trial'
+  const maxProducts = subscription?.max_products || 5
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -171,15 +217,22 @@ export default function SellerDashboard() {
           <p className="text-sm text-gray-500 mt-2">
             📧 {user.email} • 📱 {user.phone}
           </p>
+          {error && (
+            <p className="text-sm text-red-500 mt-2">⚠️ {error}</p>
+          )}
         </div>
 
         {/* Subscription Status with Trial Countdown */}
         <div className="bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl shadow-lg p-6 mb-6 border-2 border-amber-200">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-lg text-amber-800">📋 Subscription Status</h3>
-            {subscription && subscription.active && (
+            {subscription && subscription.active ? (
               <span className="bg-green-500 text-white text-xs px-3 py-1 rounded-full">
                 ✅ Active
+              </span>
+            ) : (
+              <span className="bg-red-500 text-white text-xs px-3 py-1 rounded-full">
+                ❌ Inactive
               </span>
             )}
           </div>
@@ -201,22 +254,22 @@ export default function SellerDashboard() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Trial Days Left</p>
-                  <p className={`font-bold ${daysLeft <= 3 ? 'text-red-600' : 'text-amber-700'}`}>
+                  <p className={`font-bold ${daysLeft <= 3 && daysLeft > 0 ? 'text-red-600' : 'text-amber-700'}`}>
                     {isFreeTrial ? `${daysLeft} days` : 'N/A'}
                   </p>
                 </div>
               </div>
 
-              {/* Trial Countdown Banner */}
+              {/* Trial Countdown Banner - Shows prominently for free trial */}
               {isFreeTrial && (
                 <div className="mt-4 bg-amber-200 rounded-lg p-4 border-2 border-amber-300">
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <div>
                       <p className="text-sm text-amber-800 font-semibold">
-                        ⏰ Your 14-day free trial ends on {trialEndDate}
+                        ⏰ Your 14-day free trial ends on {trialEndDate || 'soon'}
                       </p>
                       <p className="text-xs text-amber-700">
-                        You have {daysLeft} days left to enjoy 5 free product listings
+                        You have <strong>{daysLeft}</strong> days left with <strong>{subscription.max_products}</strong> free product listings
                       </p>
                     </div>
                     <Link 
@@ -229,8 +282,8 @@ export default function SellerDashboard() {
                 </div>
               )}
 
-              {/* Product Limitation Banner */}
-              {isFreeTrial && productCount >= subscription.max_products && (
+              {/* Product Limitation Warning */}
+              {productCount >= subscription.max_products && (
                 <div className="mt-4 bg-red-100 border-2 border-red-300 rounded-lg p-4">
                   <p className="text-sm text-red-700 font-semibold">
                     ⚠️ You've reached your limit of {subscription.max_products} products!
@@ -370,4 +423,4 @@ export default function SellerDashboard() {
       </div>
     </div>
   )
-                                                                        }
+}
