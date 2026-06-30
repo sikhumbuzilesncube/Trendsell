@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase/client'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -13,20 +14,38 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setError('')
-    
-    // Simple demo - just show a message
-    alert('Login functionality coming soon!')
-    setLoading(false)
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+
+      if (error) throw error
+
+      // Get user role from metadata
+      const role = data.user?.user_metadata?.role || 'seller'
+      
+      // Redirect based on role
+      window.location.href = `/dashboard/${role}`
+      
+    } catch (err: any) {
+      setError(err.message || 'Invalid email or password')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
       <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
-        <h1 className="text-3xl font-bold text-green-800 text-center mb-2">Welcome Back</h1>
-        <p className="text-gray-600 text-center mb-6">Login to your Trendsell account</p>
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-green-800">Welcome Back</h1>
+          <p className="text-gray-600 mt-2">Login to your Trendsell account</p>
+        </div>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4">
             {error}
           </div>
         )}
@@ -39,7 +58,8 @@ export default function Login() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              placeholder="you@example.com"
             />
           </div>
 
@@ -50,7 +70,8 @@ export default function Login() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              placeholder="••••••••"
             />
           </div>
 
@@ -62,14 +83,21 @@ export default function Login() {
             {loading ? 'Logging in...' : 'Login'}
           </button>
 
-          <p className="text-center text-sm text-gray-600">
-            Don't have an account?{' '}
-            <Link href="/signup/supplier" className="text-green-700 hover:underline">
-              Sign up here
-            </Link>
-          </p>
+          <div className="text-center text-sm text-gray-600">
+            <p>
+              Don't have an account?{' '}
+              <Link href="/signup/supplier" className="text-green-700 hover:underline font-medium">
+                Sign up here
+              </Link>
+            </p>
+            <p className="mt-2">
+              <Link href="/auth/forgot-password" className="text-green-700 hover:underline">
+                Forgot password?
+              </Link>
+            </p>
+          </div>
         </form>
       </div>
     </div>
   )
-            }
+          }
