@@ -111,9 +111,18 @@ export default function SellerDashboard() {
     )
   }
 
+  // Calculate trial days left
   let daysLeft = 0
+  let trialEndDate = null
   if (subscription && subscription.end_date) {
-    daysLeft = Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    const end = new Date(subscription.end_date)
+    const now = new Date()
+    daysLeft = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    trialEndDate = end.toLocaleDateString('en-US', { 
+      month: 'long', 
+      day: 'numeric', 
+      year: 'numeric' 
+    })
   }
 
   const getPlanName = (plan: string) => {
@@ -125,6 +134,9 @@ export default function SellerDashboard() {
     }
     return plans[plan] || plan
   }
+
+  const isUnlimited = subscription?.plan === 'unlimited_20'
+  const isFreeTrial = subscription?.plan === 'free_trial'
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -148,6 +160,7 @@ export default function SellerDashboard() {
       </nav>
 
       <div className="container mx-auto p-4">
+        {/* Welcome Section */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <h2 className="text-3xl font-bold text-amber-700 mb-2">
             Welcome, {user.name}! 👋
@@ -160,6 +173,7 @@ export default function SellerDashboard() {
           </p>
         </div>
 
+        {/* Subscription Status with Trial Countdown */}
         <div className="bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl shadow-lg p-6 mb-6 border-2 border-amber-200">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-lg text-amber-800">📋 Subscription Status</h3>
@@ -171,56 +185,86 @@ export default function SellerDashboard() {
           </div>
           
           {subscription ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Plan</p>
-                <p className="font-bold text-amber-700">{getPlanName(subscription.plan)}</p>
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">Plan</p>
+                  <p className="font-bold text-amber-700">{getPlanName(subscription.plan)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Max Products</p>
+                  <p className="font-bold text-amber-700">{subscription.max_products}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Products in Store</p>
+                  <p className="font-bold text-amber-700">{productCount} / {subscription.max_products}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Trial Days Left</p>
+                  <p className={`font-bold ${daysLeft <= 3 ? 'text-red-600' : 'text-amber-700'}`}>
+                    {isFreeTrial ? `${daysLeft} days` : 'N/A'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Max Products</p>
-                <p className="font-bold text-amber-700">{subscription.max_products}</p>
+
+              {/* Trial Countdown Banner */}
+              {isFreeTrial && (
+                <div className="mt-4 bg-amber-200 rounded-lg p-4 border-2 border-amber-300">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div>
+                      <p className="text-sm text-amber-800 font-semibold">
+                        ⏰ Your 14-day free trial ends on {trialEndDate}
+                      </p>
+                      <p className="text-xs text-amber-700">
+                        You have {daysLeft} days left to enjoy 5 free product listings
+                      </p>
+                    </div>
+                    <Link 
+                      href="/dashboard/seller/subscribe" 
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-6 rounded-lg transition text-sm"
+                    >
+                      Upgrade Now
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* Product Limitation Banner */}
+              {isFreeTrial && productCount >= subscription.max_products && (
+                <div className="mt-4 bg-red-100 border-2 border-red-300 rounded-lg p-4">
+                  <p className="text-sm text-red-700 font-semibold">
+                    ⚠️ You've reached your limit of {subscription.max_products} products!
+                  </p>
+                  <p className="text-xs text-red-600">
+                    <Link href="/dashboard/seller/subscribe" className="font-bold hover:underline">
+                      Upgrade now
+                    </Link> to add more products to your store
+                  </p>
+                </div>
+              )}
+
+              {/* Progress bar */}
+              <div className="mt-4">
+                <div className="flex justify-between text-xs text-gray-600 mb-1">
+                  <span>Product usage</span>
+                  <span>{productCount} / {subscription.max_products}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div 
+                    className={`h-2.5 rounded-full transition-all duration-500 ${
+                      productCount >= subscription.max_products ? 'bg-red-600' : 'bg-amber-600'
+                    }`}
+                    style={{ width: `${Math.min((productCount / subscription.max_products) * 100, 100)}%` }}
+                  ></div>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Products in Store</p>
-                <p className="font-bold text-amber-700">{productCount} / {subscription.max_products}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Trial Days Left</p>
-                <p className={`font-bold ${daysLeft <= 3 ? 'text-red-600' : 'text-amber-700'}`}>
-                  {daysLeft > 0 ? `${daysLeft} days` : 'Expired'}
-                </p>
-              </div>
-            </div>
+            </>
           ) : (
             <div className="text-center py-4">
               <p className="text-amber-700">No active subscription found</p>
-              <Link href="/dashboard/seller/subscribe" className="text-amber-600 hover:underline">
+              <Link href="/dashboard/seller/subscribe" className="text-amber-600 hover:underline font-bold">
                 Subscribe now →
               </Link>
-            </div>
-          )}
-
-          {subscription && (
-            <div className="mt-4">
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div 
-                  className="bg-amber-600 h-2.5 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min((productCount / subscription.max_products) * 100, 100)}%` }}
-                ></div>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {productCount} of {subscription.max_products} products used
-              </p>
-            </div>
-          )}
-
-          {subscription && subscription.plan === 'free_trial' && (
-            <div className="mt-4 bg-amber-200 rounded-lg p-3 border border-amber-300">
-              <p className="text-sm text-amber-800">
-                💡 You're on a free trial. <Link href="/dashboard/seller/subscribe" className="font-bold hover:underline">
-                  Upgrade now
-                </Link> to list more products!
-              </p>
             </div>
           )}
         </div>
@@ -232,7 +276,7 @@ export default function SellerDashboard() {
               <div className="text-4xl">🤖</div>
               <h3 className="font-bold text-xl text-purple-800">AI Power Tools</h3>
             </div>
-            {subscription && subscription.plan === 'unlimited_20' ? (
+            {isUnlimited ? (
               <span className="bg-purple-600 text-white text-xs px-4 py-2 rounded-full font-bold">
                 ✅ ACTIVE
               </span>
@@ -248,30 +292,42 @@ export default function SellerDashboard() {
               <div className="text-2xl mb-2">🔄</div>
               <h4 className="font-bold text-purple-700">Auto-Add Products</h4>
               <p className="text-sm text-gray-600">AI finds trending products and adds them to your store automatically</p>
+              {!isUnlimited && <div className="mt-2 text-xs text-purple-500">🔒 Unlimited only</div>}
             </div>
             <div className="bg-white rounded-lg p-4 shadow border-2 border-purple-300">
               <div className="text-2xl mb-2">📱</div>
               <h4 className="font-bold text-purple-700">Auto-Social Sharing</h4>
               <p className="text-sm text-gray-600">New products are automatically shared to WhatsApp, Facebook & more</p>
+              {!isUnlimited && <div className="mt-2 text-xs text-purple-500">🔒 Unlimited only</div>}
             </div>
             <div className="bg-white rounded-lg p-4 shadow">
               <div className="text-2xl mb-2">📈</div>
               <h4 className="font-bold text-purple-700">Smart Analytics</h4>
               <p className="text-sm text-gray-600">AI analyzes sales data to recommend best-performing products</p>
+              {!isUnlimited && <div className="mt-2 text-xs text-purple-500">🔒 Unlimited only</div>}
             </div>
           </div>
           
-          {subscription && subscription.plan !== 'unlimited_20' && (
-            <div className="mt-4 bg-purple-200 rounded-lg p-3 border border-purple-300">
+          {!isUnlimited && (
+            <div className="mt-4 bg-purple-200 rounded-lg p-4 border border-purple-300">
               <p className="text-sm text-purple-800">
-                🚀 <Link href="/dashboard/seller/subscribe" className="font-bold hover:underline">
+                🚀 <Link href="/dashboard/seller/subscribe" className="font-bold hover:underline text-purple-900">
                   Upgrade to Unlimited ($20/mo)
                 </Link> to unlock AI automation and grow your sales automatically!
               </p>
             </div>
           )}
+
+          {isUnlimited && (
+            <div className="mt-4 bg-purple-200 rounded-lg p-4 border border-purple-300">
+              <p className="text-sm text-purple-800">
+                ✅ Your AI tools are active! Your store is being optimized 24/7.
+              </p>
+            </div>
+          )}
         </div>
 
+        {/* Action Cards */}
         <div className="grid md:grid-cols-3 gap-6">
           <Link href="/dashboard/seller/products" className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition border-2 border-transparent hover:border-amber-300">
             <div className="text-4xl mb-3">🛒</div>
@@ -292,6 +348,7 @@ export default function SellerDashboard() {
           </Link>
         </div>
 
+        {/* Quick Stats */}
         <div className="mt-6 grid md:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl shadow p-4">
             <p className="text-sm text-gray-500">Total Products</p>
@@ -313,4 +370,4 @@ export default function SellerDashboard() {
       </div>
     </div>
   )
-        }
+                                                                        }
