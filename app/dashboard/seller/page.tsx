@@ -15,6 +15,7 @@ interface UserData {
 }
 
 interface Subscription {
+  id: string
   plan: string
   max_products: number
   start_date: string
@@ -26,11 +27,11 @@ export default function SellerDashboard() {
   const [user, setUser] = useState<UserData | null>(null)
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [loading, setLoading] = useState(true)
+  const [productCount, setProductCount] = useState(0)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Get current user
         const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
         
         if (authError || !authUser) {
@@ -38,7 +39,6 @@ export default function SellerDashboard() {
           return
         }
 
-        // Get user profile
         const { data: userData, error: userError } = await supabase
           .from('users')
           .select('*')
@@ -51,17 +51,25 @@ export default function SellerDashboard() {
           setUser(userData)
         }
 
-        // Get subscription
         const { data: subData, error: subError } = await supabase
           .from('subscriptions')
           .select('*')
           .eq('seller_id', authUser.id)
-          .single()
+          .maybeSingle()
 
         if (subError) {
           console.error('Subscription error:', subError)
         } else if (subData) {
           setSubscription(subData)
+        }
+
+        const { count, error: countError } = await supabase
+          .from('seller_products')
+          .select('*', { count: 'exact', head: true })
+          .eq('seller_id', authUser.id)
+
+        if (!countError && count !== null) {
+          setProductCount(count)
         }
 
       } catch (error) {
@@ -103,14 +111,23 @@ export default function SellerDashboard() {
     )
   }
 
-  // Calculate trial days left
-  const daysLeft = subscription ? 
-    Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 
-    0
+  let daysLeft = 0
+  if (subscription && subscription.end_date) {
+    daysLeft = Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  }
+
+  const getPlanName = (plan: string) => {
+    const plans: { [key: string]: string } = {
+      'free_trial': 'Free Trial',
+      'basic_5': 'Basic ($5/mo)',
+      'pro_10': 'Pro ($10/mo)',
+      'unlimited_20': 'Unlimited ($20/mo)'
+    }
+    return plans[plan] || plan
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
       <nav className="bg-amber-600 text-white p-4 shadow-lg">
         <div className="container mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -130,9 +147,7 @@ export default function SellerDashboard() {
         </div>
       </nav>
 
-      {/* Main Content */}
       <div className="container mx-auto p-4">
-        {/* Welcome Section */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <h2 className="text-3xl font-bold text-amber-700 mb-2">
             Welcome, {user.name}! 👋
@@ -145,36 +160,71 @@ export default function SellerDashboard() {
           </p>
         </div>
 
-        {/* Subscription Status */}
-        {subscription && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-            <h3 className="font-bold text-lg mb-2">📋 Subscription Status</h3>
+        <div className="bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl shadow-lg p-6 mb-6 border-2 border-amber-200">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-lg text-amber-800">📋 Subscription Status</h3>
+            {subscription && subscription.active && (
+              <span className="bg-green-500 text-white text-xs px-3 py-1 rounded-full">
+                ✅ Active
+              </span>
+            )}
+          </div>
+          
+          {subscription ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <p className="text-sm text-gray-500">Plan</p>
-                <p className="font-semibold capitalize">{subscription.plan.replace('_', ' ')}</p>
+                <p className="text-sm text-gray-600">Plan</p>
+                <p className="font-bold text-amber-700">{getPlanName(subscription.plan)}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Max Products</p>
-                <p className="font-semibold">{subscription.max_products}</p>
+                <p className="text-sm text-gray-600">Max Products</p>
+                <p className="font-bold text-amber-700">{subscription.max_products}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Status</p>
-                <p className={`font-semibold ${subscription.active ? 'text-green-600' : 'text-red-600'}`}>
-                  {subscription.active ? '✅ Active' : '❌ Inactive'}
-                </p>
+                <p className="text-sm text-gray-600">Products in Store</p>
+                <p className="font-bold text-amber-700">{productCount} / {subscription.max_products}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Trial Days Left</p>
-                <p className={`font-semibold ${daysLeft <= 3 ? 'text-red-600' : 'text-amber-600'}`}>
-                  {daysLeft} days
+                <p className="text-sm text-gray-600">Trial Days Left</p>
+                <p className={`font-bold ${daysLeft <= 3 ? 'text-red-600' : 'text-amber-700'}`}>
+                  {daysLeft > 0 ? `${daysLeft} days` : 'Expired'}
                 </p>
               </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-amber-700">No active subscription found</p>
+              <Link href="/dashboard/seller/subscribe" className="text-amber-600 hover:underline">
+                Subscribe now →
+              </Link>
+            </div>
+          )}
 
-        {/* Action Cards */}
+          {subscription && (
+            <div className="mt-4">
+              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div 
+                  className="bg-amber-600 h-2.5 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min((productCount / subscription.max_products) * 100, 100)}%` }}
+                ></div>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {productCount} of {subscription.max_products} products used
+              </p>
+            </div>
+          )}
+
+          {subscription && subscription.plan === 'free_trial' && (
+            <div className="mt-4 bg-amber-200 rounded-lg p-3 border border-amber-300">
+              <p className="text-sm text-amber-800">
+                💡 You're on a free trial. <Link href="/dashboard/seller/subscribe" className="font-bold hover:underline">
+                  Upgrade now
+                </Link> to list more products!
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="grid md:grid-cols-3 gap-6">
           <Link href="/dashboard/seller/products" className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition border-2 border-transparent hover:border-amber-300">
             <div className="text-4xl mb-3">🛒</div>
@@ -195,11 +245,10 @@ export default function SellerDashboard() {
           </Link>
         </div>
 
-        {/* Quick Stats */}
         <div className="mt-6 grid md:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl shadow p-4">
             <p className="text-sm text-gray-500">Total Products</p>
-            <p className="text-2xl font-bold text-amber-600">0</p>
+            <p className="text-2xl font-bold text-amber-600">{productCount}</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
             <p className="text-sm text-gray-500">Orders</p>
@@ -217,4 +266,4 @@ export default function SellerDashboard() {
       </div>
     </div>
   )
-    }
+                                         }
