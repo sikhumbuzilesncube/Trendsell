@@ -29,24 +29,22 @@ export default function SellerDashboard() {
   const [loading, setLoading] = useState(true)
   const [productCount, setProductCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [creatingSubscription, setCreatingSubscription] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setError(null)
         
-        // Get current user
         const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
         
         if (authError || !authUser) {
-          console.error('Auth error:', authError)
           window.location.href = '/auth/login'
           return
         }
 
         console.log('Auth user ID:', authUser.id)
 
-        // Get user profile
         const { data: userData, error: userError } = await supabase
           .from('users')
           .select('*')
@@ -60,8 +58,8 @@ export default function SellerDashboard() {
           console.log('User data:', userData)
         }
 
-        // Get subscription - with better error handling
-        const { data: subData, error: subError } = await supabase
+        // Try to get subscription
+        let { data: subData, error: subError } = await supabase
           .from('subscriptions')
           .select('*')
           .eq('seller_id', authUser.id)
@@ -70,12 +68,13 @@ export default function SellerDashboard() {
         if (subError) {
           console.error('Subscription error:', subError)
           setError('Could not load subscription data')
-        } else if (subData) {
-          setSubscription(subData)
-          console.log('Subscription data:', subData)
-        } else {
-          console.log('No subscription found - creating default')
-          // Create default subscription if none exists
+        }
+
+        // If no subscription exists, create one
+        if (!subData) {
+          console.log('No subscription found - creating one...')
+          setCreatingSubscription(true)
+          
           const defaultSub = {
             seller_id: authUser.id,
             plan: 'free_trial',
@@ -93,13 +92,17 @@ export default function SellerDashboard() {
             
           if (createError) {
             console.error('Error creating subscription:', createError)
+            setError('Could not create subscription')
           } else if (newSub) {
             setSubscription(newSub)
             console.log('Created default subscription:', newSub)
           }
+          setCreatingSubscription(false)
+        } else {
+          setSubscription(subData)
+          console.log('Subscription data:', subData)
         }
 
-        // Count products in store
         const { count, error: countError } = await supabase
           .from('seller_products')
           .select('*', { count: 'exact', head: true })
@@ -107,7 +110,6 @@ export default function SellerDashboard() {
 
         if (!countError && count !== null) {
           setProductCount(count)
-          console.log('Product count:', count)
         }
 
       } catch (error) {
@@ -150,15 +152,17 @@ export default function SellerDashboard() {
     )
   }
 
-  // Calculate trial days left
+  // Calculate trial days left - handle null subscription
   let daysLeft = 0
   let trialEndDate = null
   let isFreeTrial = false
   let isUnlimited = false
+  let maxProducts = 5 // Default
   
   if (subscription) {
     isFreeTrial = subscription.plan === 'free_trial'
     isUnlimited = subscription.plan === 'unlimited_20'
+    maxProducts = subscription.max_products || 5
     
     if (subscription.end_date) {
       const end = new Date(subscription.end_date)
@@ -179,10 +183,8 @@ export default function SellerDashboard() {
       'pro_10': 'Pro ($10/mo)',
       'unlimited_20': 'Unlimited ($20/mo)'
     }
-    return plans[plan] || plan
+    return plans[plan] || 'Free Trial'
   }
-
-  const maxProducts = subscription?.max_products || 5
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -220,6 +222,9 @@ export default function SellerDashboard() {
           {error && (
             <p className="text-sm text-red-500 mt-2">⚠️ {error}</p>
           )}
+          {creatingSubscription && (
+            <p className="text-sm text-amber-500 mt-2">⏳ Setting up your free trial...</p>
+          )}
         </div>
 
         {/* Subscription Status with Trial Countdown */}
@@ -231,8 +236,8 @@ export default function SellerDashboard() {
                 ✅ Active
               </span>
             ) : (
-              <span className="bg-red-500 text-white text-xs px-3 py-1 rounded-full">
-                ❌ Inactive
+              <span className="bg-yellow-500 text-white text-xs px-3 py-1 rounded-full">
+                ⏳ Setting up
               </span>
             )}
           </div>
@@ -260,7 +265,7 @@ export default function SellerDashboard() {
                 </div>
               </div>
 
-              {/* Trial Countdown Banner - Shows prominently for free trial */}
+              {/* Trial Countdown Banner */}
               {isFreeTrial && (
                 <div className="mt-4 bg-amber-200 rounded-lg p-4 border-2 border-amber-300">
                   <div className="flex items-center justify-between flex-wrap gap-4">
@@ -314,15 +319,13 @@ export default function SellerDashboard() {
             </>
           ) : (
             <div className="text-center py-4">
-              <p className="text-amber-700">No active subscription found</p>
-              <Link href="/dashboard/seller/subscribe" className="text-amber-600 hover:underline font-bold">
-                Subscribe now →
-              </Link>
+              <p className="text-amber-700">Setting up your free trial...</p>
+              <p className="text-sm text-gray-500">Please refresh the page</p>
             </div>
           )}
         </div>
 
-        {/* AI Feature - Highlighted for Unlimited Plan */}
+        {/* AI Feature */}
         <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl shadow-lg p-6 mb-6 border-2 border-purple-300">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -367,14 +370,6 @@ export default function SellerDashboard() {
                 🚀 <Link href="/dashboard/seller/subscribe" className="font-bold hover:underline text-purple-900">
                   Upgrade to Unlimited ($20/mo)
                 </Link> to unlock AI automation and grow your sales automatically!
-              </p>
-            </div>
-          )}
-
-          {isUnlimited && (
-            <div className="mt-4 bg-purple-200 rounded-lg p-4 border border-purple-300">
-              <p className="text-sm text-purple-800">
-                ✅ Your AI tools are active! Your store is being optimized 24/7.
               </p>
             </div>
           )}
@@ -423,4 +418,4 @@ export default function SellerDashboard() {
       </div>
     </div>
   )
-}
+    }
