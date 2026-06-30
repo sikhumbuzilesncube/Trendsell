@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
 
 export default function SupplierSignup() {
   const [formData, setFormData] = useState({
@@ -20,7 +19,6 @@ export default function SupplierSignup() {
   })
   
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
 
   const banks = [
     'CBZ', 'NMB', 'Stanbic', 'Standard Chartered', 
@@ -34,55 +32,16 @@ export default function SupplierSignup() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError('')
-
-    // Validate passwords match
+    
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
+      alert('Passwords do not match!')
       setLoading(false)
       return
     }
 
-    try {
-      // Sign up with Supabase
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            name: formData.name,
-            surname: formData.surname,
-            phone: formData.phone,
-            role: 'supplier'
-          }
-        }
-      })
-
-      if (error) throw error
-
-      // Create user in database
-      const { error: dbError } = await supabase
-        .from('users')
-        .insert({
-          id: data.user?.id,
-          email: formData.email,
-          name: formData.name,
-          surname: formData.surname,
-          phone: formData.phone,
-          role: 'supplier',
-          verified: false
-        })
-
-      if (dbError) throw dbError
-
-      alert('Account created! Please check your email to verify your account.')
-      window.location.href = '/dashboard/supplier'
-      
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    // Demo - just show success
+    alert('Account created! (Supabase integration coming soon)')
+    setLoading(false)
   }
 
   return (
@@ -90,12 +49,6 @@ export default function SupplierSignup() {
       <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-lg">
         <h1 className="text-3xl font-bold text-green-800 mb-2">Supplier Sign Up</h1>
         <p className="text-gray-600 mb-6">Join for free and start listing your products</p>
-        
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid md:grid-cols-2 gap-4">
