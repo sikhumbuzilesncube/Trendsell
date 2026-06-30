@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase/client'
 
 export default function SupplierSignup() {
   const [formData, setFormData] = useState({
@@ -19,6 +20,8 @@ export default function SupplierSignup() {
   })
   
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
 
   const banks = [
     'CBZ', 'NMB', 'Stanbic', 'Standard Chartered', 
@@ -32,16 +35,92 @@ export default function SupplierSignup() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    
+    setError('')
+
+    // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match!')
+      setError('Passwords do not match')
       setLoading(false)
       return
     }
 
-    // Demo - just show success
-    alert('Account created! (Supabase integration coming soon)')
-    setLoading(false)
+    try {
+      // 1. Sign up with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            name: formData.name,
+            surname: formData.surname,
+            phone: formData.phone,
+            role: 'supplier'
+          }
+        }
+      })
+
+      if (authError) throw authError
+
+      if (!authData.user) {
+        throw new Error('User creation failed')
+      }
+
+      // 2. Create user in database
+      const { error: dbError } = await supabase
+        .from('users')
+        .insert({
+          id: authData.user.id,
+          email: formData.email,
+          name: formData.name,
+          surname: formData.surname,
+          phone: formData.phone,
+          role: 'supplier',
+          verified: false,
+          created_at: new Date().toISOString()
+        })
+
+      if (dbError) throw dbError
+
+      // 3. Create payment method
+      const paymentData = {
+        user_id: authData.user.id,
+        type: formData.paymentMethod,
+        provider: formData.mobileProvider || formData.bankName || null,
+        account_number: formData.mobileNumber || formData.accountNumber || null,
+        created_at: new Date().toISOString()
+      }
+
+      const { error: paymentError } = await supabase
+        .from('payment_methods')
+        .insert(paymentData)
+
+      if (paymentError) throw paymentError
+
+      setSuccess(true)
+      setTimeout(() => {
+        window.location.href = '/dashboard/supplier'
+      }, 2000)
+
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during signup')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
+        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg text-center">
+          <div className="text-6xl mb-4">✅</div>
+          <h2 className="text-2xl font-bold text-green-800 mb-2">Account Created!</h2>
+          <p className="text-gray-600 mb-4">
+            Please check your email to verify your account.
+          </p>
+          <p className="text-sm text-gray-500">Redirecting to dashboard...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -49,6 +128,12 @@ export default function SupplierSignup() {
       <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-lg">
         <h1 className="text-3xl font-bold text-green-800 mb-2">Supplier Sign Up</h1>
         <p className="text-gray-600 mb-6">Join for free and start listing your products</p>
+        
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid md:grid-cols-2 gap-4">
@@ -223,4 +308,4 @@ export default function SupplierSignup() {
       </div>
     </div>
   )
-    }
+          }
