@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -14,24 +13,10 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setError('')
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      })
-
-      if (error) throw error
-
-      // Redirect based on role
-      const userRole = data.user?.user_metadata?.role || 'seller'
-      window.location.href = `/dashboard/${userRole}`
-      
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    
+    // Simple demo - just show a message
+    alert('Login functionality coming soon!')
+    setLoading(false)
   }
 
   return (
@@ -87,4 +72,4 @@ export default function Login() {
       </div>
     </div>
   )
-        }
+            }
