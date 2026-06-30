@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase/client'
 import Link from 'next/link'
 
 interface UserData {
+  id: string
   name: string
   surname: string
   store_name: string
@@ -44,7 +45,9 @@ export default function SellerDashboard() {
           .eq('id', authUser.id)
           .single()
 
-        if (!userError && userData) {
+        if (userError) {
+          console.error('User error:', userError)
+        } else if (userData) {
           setUser(userData)
         }
 
@@ -55,7 +58,9 @@ export default function SellerDashboard() {
           .eq('seller_id', authUser.id)
           .single()
 
-        if (!subError && subData) {
+        if (subError) {
+          console.error('Subscription error:', subError)
+        } else if (subData) {
           setSubscription(subData)
         }
 
@@ -98,21 +103,26 @@ export default function SellerDashboard() {
     )
   }
 
+  // Calculate trial days left
+  const daysLeft = subscription ? 
+    Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 
+    0
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navigation */}
-      <nav className="bg-amber-600 text-white p-4">
+      <nav className="bg-amber-600 text-white p-4 shadow-lg">
         <div className="container mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold">
-            TrendSell
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">🏪 TrendSell</h1>
+          </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm">
+            <span className="text-sm bg-amber-700 px-3 py-1 rounded-full">
               {user.store_name || 'My Store'}
             </span>
             <button
               onClick={handleLogout}
-              className="bg-amber-700 hover:bg-amber-800 px-4 py-2 rounded-lg text-sm"
+              className="bg-amber-700 hover:bg-amber-800 px-4 py-2 rounded-lg text-sm transition"
             >
               Logout
             </button>
@@ -131,7 +141,7 @@ export default function SellerDashboard() {
             {user.verified ? '✅ Verified Seller' : '🔒 Unverified Seller'}
           </p>
           <p className="text-sm text-gray-500 mt-2">
-            Email: {user.email} • Phone: {user.phone}
+            📧 {user.email} • 📱 {user.phone}
           </p>
         </div>
 
@@ -155,9 +165,9 @@ export default function SellerDashboard() {
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Trial Ends</p>
-                <p className="font-semibold">
-                  {new Date(subscription.end_date).toLocaleDateString()}
+                <p className="text-sm text-gray-500">Trial Days Left</p>
+                <p className={`font-semibold ${daysLeft <= 3 ? 'text-red-600' : 'text-amber-600'}`}>
+                  {daysLeft} days
                 </p>
               </div>
             </div>
@@ -166,19 +176,19 @@ export default function SellerDashboard() {
 
         {/* Action Cards */}
         <div className="grid md:grid-cols-3 gap-6">
-          <Link href="/dashboard/seller/products" className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition">
+          <Link href="/dashboard/seller/products" className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition border-2 border-transparent hover:border-amber-300">
             <div className="text-4xl mb-3">🛒</div>
             <h3 className="font-bold text-lg">Browse Products</h3>
             <p className="text-sm text-gray-600">Find products to add to your store</p>
           </Link>
 
-          <Link href="/dashboard/seller/store" className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition">
+          <Link href="/dashboard/seller/store" className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition border-2 border-transparent hover:border-amber-300">
             <div className="text-4xl mb-3">🏪</div>
             <h3 className="font-bold text-lg">My Store</h3>
             <p className="text-sm text-gray-600">Manage your store products</p>
           </Link>
 
-          <Link href="/dashboard/seller/orders" className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition">
+          <Link href="/dashboard/seller/orders" className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition border-2 border-transparent hover:border-amber-300">
             <div className="text-4xl mb-3">📦</div>
             <h3 className="font-bold text-lg">Orders</h3>
             <p className="text-sm text-gray-600">View your orders and earnings</p>
@@ -200,13 +210,11 @@ export default function SellerDashboard() {
             <p className="text-2xl font-bold text-green-600">$0.00</p>
           </div>
           <div className="bg-white rounded-xl shadow p-4">
-            <p className="text-sm text-gray-500">Trial Days Left</p>
-            <p className="text-2xl font-bold text-amber-600">
-              {subscription ? Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0}
-            </p>
+            <p className="text-sm text-gray-500">Store Views</p>
+            <p className="text-2xl font-bold text-amber-600">0</p>
           </div>
         </div>
       </div>
     </div>
   )
-}
+    }
