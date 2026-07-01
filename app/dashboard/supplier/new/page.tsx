@@ -67,7 +67,7 @@ export default function NewProduct() {
       // Parse numbers
       const wholesalePrice = parseFloat(formData.wholesale_price)
       const profitMargin = parseFloat(formData.seller_profit_margin)
-      const stockQuantity = parseInt(formData.stock_quantity)
+      const stockQuantity = parseInt(formData.stock_quantity) || 0
 
       if (isNaN(wholesalePrice) || wholesalePrice <= 0) {
         throw new Error('Please enter a valid wholesale price')
@@ -95,7 +95,7 @@ export default function NewProduct() {
           wholesale_price: wholesalePrice,
           seller_profit_margin: profitMargin,
           final_price: finalPrice,
-          stock_quantity: stockQuantity || 0,
+          stock_quantity: stockQuantity,
           image_urls: imageUrls,
           verified: false
         })
@@ -129,9 +129,14 @@ export default function NewProduct() {
       <div className="container mx-auto max-w-2xl">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-green-700">List New Product</h1>
-          <Link href="/dashboard/supplier" className="text-gray-600 hover:text-green-600">
-            ← Back to Dashboard
-          </Link>
+          <div className="flex gap-4">
+            <Link href="/dashboard/supplier/products" className="text-gray-600 hover:text-green-600">
+              ← My Products
+            </Link>
+            <Link href="/dashboard/supplier" className="text-gray-600 hover:text-green-600">
+              Dashboard
+            </Link>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-lg p-6">
