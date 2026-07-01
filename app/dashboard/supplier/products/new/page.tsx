@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import Link from 'next/link'
+import Image from 'next/image'
 
 interface Category {
   id: string
@@ -17,7 +18,6 @@ export default function NewProduct() {
     wholesale_price: '',
     seller_profit_margin: '',
     stock_quantity: '',
-    image_urls: [] as string[]
   })
   
   const [categories, setCategories] = useState<Category[]>([])
@@ -26,7 +26,11 @@ export default function NewProduct() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [user, setUser] = useState<any>(null)
-  const [imageUrls, setImageUrls] = useState<string[]>(['', '', '', ''])
+  const [imageFiles, setImageFiles] = useState<File[]>([])
+  const [imagePreviews, setImagePreviews] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchCategories()
@@ -41,8 +45,6 @@ export default function NewProduct() {
   const fetchCategories = async () => {
     try {
       setLoadingCategories(true)
-      console.log('Fetching categories...')
-      
       const { data, error } = await supabase
         .from('categories')
         .select('*')
@@ -50,14 +52,11 @@ export default function NewProduct() {
       
       if (error) {
         console.error('Error fetching categories:', error)
-        setError('Could not load categories')
       } else {
-        console.log('Categories loaded:', data)
         setCategories(data || [])
       }
     } catch (error) {
       console.error('Error fetching categories:', error)
-      setError('Could not load categories')
     } finally {
       setLoadingCategories(false)
     }
@@ -67,35 +66,87 @@ export default function NewProduct() {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  const handleImageChange = (index: number, value: string) => {
-    const newUrls = [...imageUrls]
-    newUrls[index] = value
-    setImageUrls(newUrls)
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files) return
+
+    const selectedFiles = Array.from(files)
+    
+    // Check total images (max 8)
+    if (imageFiles.length + selectedFiles.length > 8) {
+      setError('Maximum 8 images allowed')
+      return
+    }
+
+    // Check file sizes (max 5MB each)
+    for (const file of selectedFiles) {
+      if (file.size > 5 * 1024 * 1024) {
+        setError(`Image ${file.name} is too large. Max 5MB allowed.`)
+        return
+      }
+    }
+
+    // Create previews
+    const newPreviews = selectedFiles.map(file => URL.createObjectURL(file))
+    setImagePreviews([...imagePreviews, ...newPreviews])
+    setImageFiles([...imageFiles, ...selectedFiles])
+    setError('')
   }
 
-  const addImageField = () => {
-    if (imageUrls.length < 8) {
-      setImageUrls([...imageUrls, ''])
-    }
+  const removeImage = (index: number) => {
+    const newFiles = imageFiles.filter((_, i) => i !== index)
+    const newPreviews = imagePreviews.filter((_, i) => i !== index)
+    setImageFiles(newFiles)
+    setImagePreviews(newPreviews)
+    
+    // Revoke object URL to free memory
+    URL.revokeObjectURL(imagePreviews[index])
   }
 
-  const removeImageField = (index: number) => {
-    if (imageUrls.length > 1) {
-      const newUrls = imageUrls.filter((_, i) => i !== index)
-      setImageUrls(newUrls)
+  const uploadImages = async (productId: string): Promise<string[]> => {
+    const uploadedUrls: string[] = []
+    
+    for (let i = 0; i < imageFiles.length; i++) {
+      const file = imageFiles[i]
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${productId}/${Date.now()}_${i}.${fileExt}`
+      
+      const { data, error } = await supabase.storage
+        .from('product-images')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (error) {
+        console.error('Upload error:', error)
+        throw new Error(`Failed to upload image ${i + 1}: ${error.message}`)
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(fileName)
+
+      uploadedUrls.push(publicUrl)
+      setUploadProgress(Math.round(((i + 1) / imageFiles.length) * 100))
     }
+
+    return uploadedUrls
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setUploadProgress(0)
 
     try {
       if (!user) {
         throw new Error('Please login first')
       }
 
+      // Validate form
       const wholesalePrice = parseFloat(formData.wholesale_price)
       const profitMargin = parseFloat(formData.seller_profit_margin)
       const stockQuantity = parseInt(formData.stock_quantity) || 0
@@ -112,16 +163,19 @@ export default function NewProduct() {
         throw new Error('Please select a category')
       }
 
-      const finalPrice = wholesalePrice + (wholesalePrice * profitMargin / 100)
-
-      // Filter out empty image URLs
-      const validImageUrls = imageUrls.filter(url => url.trim() !== '')
-
-      if (validImageUrls.length === 0) {
-        throw new Error('Please add at least one product image URL')
+      if (imageFiles.length === 0) {
+        throw new Error('Please add at least one product image')
       }
 
-      const { error: insertError } = await supabase
+      if (imageFiles.length < 4) {
+        setError('⚠️ Adding at least 4 images is recommended for better visibility')
+        // Still allow submission but warn
+      }
+
+      const finalPrice = wholesalePrice + (wholesalePrice * profitMargin / 100)
+
+      // First, create the product
+      const { data: productData, error: insertError } = await supabase
         .from('products')
         .insert({
           supplier_id: user.id,
@@ -132,11 +186,25 @@ export default function NewProduct() {
           seller_profit_margin: profitMargin,
           final_price: finalPrice,
           stock_quantity: stockQuantity,
-          image_urls: validImageUrls,
+          image_urls: [], // Will update after upload
           verified: false
         })
+        .select()
+        .single()
 
       if (insertError) throw insertError
+
+      // Then upload images and get URLs
+      setUploading(true)
+      const imageUrls = await uploadImages(productData.id)
+
+      // Update product with image URLs
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({ image_urls: imageUrls })
+        .eq('id', productData.id)
+
+      if (updateError) throw updateError
 
       setSuccess(true)
       setFormData({
@@ -146,9 +214,16 @@ export default function NewProduct() {
         wholesale_price: '',
         seller_profit_margin: '',
         stock_quantity: '',
-        image_urls: []
       })
-      setImageUrls(['', '', '', ''])
+      setImageFiles([])
+      setImagePreviews([])
+      setUploadProgress(0)
+      setUploading(false)
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
 
       setTimeout(() => {
         setSuccess(false)
@@ -156,6 +231,7 @@ export default function NewProduct() {
 
     } catch (err: any) {
       setError(err.message || 'An error occurred')
+      setUploading(false)
     } finally {
       setLoading(false)
     }
@@ -194,6 +270,18 @@ export default function NewProduct() {
             </div>
           )}
 
+          {uploading && (
+            <div className="bg-blue-50 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg mb-4">
+              <p>📤 Uploading images... {uploadProgress}%</p>
+              <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                <div 
+                  className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Product Name */}
             <div>
@@ -222,7 +310,7 @@ export default function NewProduct() {
               />
             </div>
 
-            {/* Category - FIXED with better loading state */}
+            {/* Category */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Category *</label>
               <select
@@ -243,19 +331,6 @@ export default function NewProduct() {
                   ))
                 )}
               </select>
-              {loadingCategories && (
-                <p className="text-xs text-gray-500 mt-1">⏳ Loading categories...</p>
-              )}
-              {!loadingCategories && categories.length === 0 && (
-                <p className="text-xs text-red-500 mt-1">
-                  ⚠️ No categories found. Please add categories in Supabase first.
-                </p>
-              )}
-              {!loadingCategories && categories.length > 0 && (
-                <p className="text-xs text-green-600 mt-1">
-                  ✅ {categories.length} categories available
-                </p>
-              )}
             </div>
 
             {/* Price and Margin */}
@@ -313,56 +388,72 @@ export default function NewProduct() {
               />
             </div>
 
-            {/* Product Images */}
+            {/* Product Images Upload */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">Product Images (at least 4 recommended) *</label>
-              <p className="text-xs text-gray-500 mb-2">Enter image URLs for your product photos</p>
-              
-              {imageUrls.map((url, index) => (
-                <div key={index} className="flex gap-2 mb-2">
-                  <input
-                    type="url"
-                    value={url}
-                    onChange={(e) => handleImageChange(index, e.target.value)}
-                    placeholder={`Image ${index + 1} URL`}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                  {imageUrls.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeImageField(index)}
-                      className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-
-              <div className="flex gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={addImageField}
-                  disabled={imageUrls.length >= 8}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50"
-                >
-                  + Add Another Image
-                </button>
-                <span className="text-xs text-gray-500 self-center">
-                  {imageUrls.filter(u => u.trim() !== '').length} images added
-                </span>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">
-                At least 4 images recommended for better product visibility
+              <label className="block text-sm font-medium text-gray-700">Product Images *</label>
+              <p className="text-xs text-gray-500 mb-2">
+                Upload up to 8 images (Max 5MB each). At least 4 recommended.
               </p>
+              
+              {/* Upload Area */}
+              <div 
+                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-green-500 transition cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+                <div className="text-4xl mb-2">📸</div>
+                <p className="text-gray-600">Click to upload images</p>
+                <p className="text-xs text-gray-400">or drag and drop</p>
+                <p className="text-xs text-gray-400 mt-2">
+                  {imageFiles.length} images selected (max 8)
+                </p>
+              </div>
+
+              {/* Image Previews */}
+              {imagePreviews.length > 0 && (
+                <div className="grid grid-cols-4 gap-2 mt-3">
+                  {imagePreviews.map((preview, index) => (
+                    <div key={index} className="relative group">
+                      <img 
+                        src={preview} 
+                        alt={`Product ${index + 1}`}
+                        className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                      >
+                        ✕
+                      </button>
+                      <span className="absolute bottom-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
+                        {index + 1}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {imageFiles.length > 0 && imageFiles.length < 4 && (
+                <p className="text-xs text-amber-600 mt-2">
+                  ⚠️ Adding {4 - imageFiles.length} more images is recommended
+                </p>
+              )}
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || uploading}
               className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-3 px-4 rounded-lg transition disabled:opacity-50"
             >
-              {loading ? 'Listing product...' : 'List Product'}
+              {loading || uploading ? 'Processing...' : 'List Product'}
             </button>
           </form>
         </div>
