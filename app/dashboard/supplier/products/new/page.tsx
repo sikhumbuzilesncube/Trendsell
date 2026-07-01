@@ -17,7 +17,7 @@ export default function NewProduct() {
     wholesale_price: '',
     seller_profit_margin: '',
     stock_quantity: '',
-    image_urls: ''
+    image_urls: [] as string[]
   })
   
   const [categories, setCategories] = useState<Category[]>([])
@@ -25,6 +25,8 @@ export default function NewProduct() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [imageUrls, setImageUrls] = useState<string[]>(['', '', '', ''])
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     fetchCategories()
@@ -54,6 +56,25 @@ export default function NewProduct() {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
+  const handleImageChange = (index: number, value: string) => {
+    const newUrls = [...imageUrls]
+    newUrls[index] = value
+    setImageUrls(newUrls)
+  }
+
+  const addImageField = () => {
+    if (imageUrls.length < 8) {
+      setImageUrls([...imageUrls, ''])
+    }
+  }
+
+  const removeImageField = (index: number) => {
+    if (imageUrls.length > 1) {
+      const newUrls = imageUrls.filter((_, i) => i !== index)
+      setImageUrls(newUrls)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -76,11 +97,18 @@ export default function NewProduct() {
         throw new Error('Please enter a valid profit margin')
       }
 
+      if (!formData.category_id) {
+        throw new Error('Please select a category')
+      }
+
       const finalPrice = wholesalePrice + (wholesalePrice * profitMargin / 100)
 
-      const imageUrls = formData.image_urls
-        ? formData.image_urls.split(',').map(url => url.trim()).filter(url => url)
-        : []
+      // Filter out empty image URLs
+      const validImageUrls = imageUrls.filter(url => url.trim() !== '')
+
+      if (validImageUrls.length === 0) {
+        throw new Error('Please add at least one product image URL')
+      }
 
       const { error: insertError } = await supabase
         .from('products')
@@ -88,12 +116,12 @@ export default function NewProduct() {
           supplier_id: user.id,
           name: formData.name,
           description: formData.description,
-          category_id: formData.category_id || null,
+          category_id: formData.category_id,
           wholesale_price: wholesalePrice,
           seller_profit_margin: profitMargin,
           final_price: finalPrice,
           stock_quantity: stockQuantity,
-          image_urls: imageUrls,
+          image_urls: validImageUrls,
           verified: false
         })
 
@@ -107,8 +135,9 @@ export default function NewProduct() {
         wholesale_price: '',
         seller_profit_margin: '',
         stock_quantity: '',
-        image_urls: ''
+        image_urls: []
       })
+      setImageUrls(['', '', '', ''])
 
       setTimeout(() => {
         setSuccess(false)
@@ -120,6 +149,11 @@ export default function NewProduct() {
       setLoading(false)
     }
   }
+
+  // Calculate suggested retail price
+  const wholesalePrice = parseFloat(formData.wholesale_price) || 0
+  const profitMargin = parseFloat(formData.seller_profit_margin) || 0
+  const suggestedPrice = wholesalePrice + (wholesalePrice * profitMargin / 100)
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -150,6 +184,7 @@ export default function NewProduct() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Product Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Product Name *</label>
               <input
@@ -163,6 +198,7 @@ export default function NewProduct() {
               />
             </div>
 
+            {/* Description */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Description</label>
               <textarea
@@ -175,21 +211,33 @@ export default function NewProduct() {
               />
             </div>
 
+            {/* Category - FIXED */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">Category</label>
+              <label className="block text-sm font-medium text-gray-700">Category *</label>
               <select
                 name="category_id"
+                required
                 value={formData.category_id}
                 onChange={handleChange}
                 className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
               >
-                <option value="">Select category</option>
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
+                <option value="">-- Select Category --</option>
+                {categories.length === 0 ? (
+                  <option value="" disabled>Loading categories...</option>
+                ) : (
+                  categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))
+                )}
               </select>
+              {categories.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ⚠️ No categories found. Please add categories in Supabase first.
+                </p>
+              )}
             </div>
 
+            {/* Price and Margin */}
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Wholesale Price (USD) *</label>
@@ -221,16 +269,16 @@ export default function NewProduct() {
               </div>
             </div>
 
+            {/* Suggested Retail Price */}
             <div className="bg-green-50 rounded-lg p-4 border border-green-200">
               <p className="text-sm text-green-700">
                 💡 Suggested retail price for sellers: <strong>
-                  ${formData.wholesale_price && formData.seller_profit_margin ? 
-                    (parseFloat(formData.wholesale_price) + (parseFloat(formData.wholesale_price) * parseFloat(formData.seller_profit_margin) / 100)).toFixed(2) 
-                    : '0.00'}
+                  ${suggestedPrice.toFixed(2)}
                 </strong>
               </p>
             </div>
 
+            {/* Stock Quantity */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Stock Quantity</label>
               <input
@@ -244,17 +292,48 @@ export default function NewProduct() {
               />
             </div>
 
+            {/* Product Images - UPDATED */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">Image URLs (comma separated)</label>
-              <input
-                type="text"
-                name="image_urls"
-                value={formData.image_urls}
-                onChange={handleChange}
-                className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="https://example.com/image1.jpg, https://example.com/image2.jpg"
-              />
-              <p className="text-xs text-gray-500 mt-1">Separate multiple URLs with commas</p>
+              <label className="block text-sm font-medium text-gray-700">Product Images (at least 4 recommended) *</label>
+              <p className="text-xs text-gray-500 mb-2">Enter image URLs for your product photos</p>
+              
+              {imageUrls.map((url, index) => (
+                <div key={index} className="flex gap-2 mb-2">
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => handleImageChange(index, e.target.value)}
+                    placeholder={`Image ${index + 1} URL`}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                  {imageUrls.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeImageField(index)}
+                      className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              <div className="flex gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={addImageField}
+                  disabled={imageUrls.length >= 8}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50"
+                >
+                  + Add Another Image
+                </button>
+                <span className="text-xs text-gray-500 self-center">
+                  {imageUrls.filter(u => u.trim() !== '').length} images added
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                At least 4 images recommended for better product visibility
+              </p>
             </div>
 
             <button
@@ -269,4 +348,4 @@ export default function NewProduct() {
       </div>
     </div>
   )
-      }
+    }
