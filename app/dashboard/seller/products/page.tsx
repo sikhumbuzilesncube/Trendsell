@@ -131,6 +131,14 @@ export default function BrowseProducts() {
           active: true
         })
 
+      // Add this function after the addToStore function
+const shareProduct = (product: any) => {
+  const text = `🛍️ Check out ${product.name} at my store! Price: $${product.final_price}\n\nShop now: https://trendsell.co.zw/product/${product.id}`
+  
+  // Open WhatsApp
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+}
+
       if (insertError) throw insertError
       alert('Product added to your store successfully! 🎉')
       
