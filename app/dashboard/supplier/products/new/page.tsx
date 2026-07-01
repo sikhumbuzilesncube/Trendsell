@@ -22,11 +22,11 @@ export default function NewProduct() {
   
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingCategories, setLoadingCategories] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [imageUrls, setImageUrls] = useState<string[]>(['', '', '', ''])
-  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     fetchCategories()
@@ -40,15 +40,26 @@ export default function NewProduct() {
 
   const fetchCategories = async () => {
     try {
+      setLoadingCategories(true)
+      console.log('Fetching categories...')
+      
       const { data, error } = await supabase
         .from('categories')
         .select('*')
         .order('name')
       
-      if (error) throw error
-      setCategories(data || [])
+      if (error) {
+        console.error('Error fetching categories:', error)
+        setError('Could not load categories')
+      } else {
+        console.log('Categories loaded:', data)
+        setCategories(data || [])
+      }
     } catch (error) {
       console.error('Error fetching categories:', error)
+      setError('Could not load categories')
+    } finally {
+      setLoadingCategories(false)
     }
   }
 
@@ -211,7 +222,7 @@ export default function NewProduct() {
               />
             </div>
 
-            {/* Category - FIXED */}
+            {/* Category - FIXED with better loading state */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Category *</label>
               <select
@@ -222,17 +233,27 @@ export default function NewProduct() {
                 className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <option value="">-- Select Category --</option>
-                {categories.length === 0 ? (
+                {loadingCategories ? (
                   <option value="" disabled>Loading categories...</option>
+                ) : categories.length === 0 ? (
+                  <option value="" disabled>⚠️ No categories found</option>
                 ) : (
                   categories.map(cat => (
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))
                 )}
               </select>
-              {categories.length === 0 && (
-                <p className="text-xs text-amber-600 mt-1">
+              {loadingCategories && (
+                <p className="text-xs text-gray-500 mt-1">⏳ Loading categories...</p>
+              )}
+              {!loadingCategories && categories.length === 0 && (
+                <p className="text-xs text-red-500 mt-1">
                   ⚠️ No categories found. Please add categories in Supabase first.
+                </p>
+              )}
+              {!loadingCategories && categories.length > 0 && (
+                <p className="text-xs text-green-600 mt-1">
+                  ✅ {categories.length} categories available
                 </p>
               )}
             </div>
@@ -292,7 +313,7 @@ export default function NewProduct() {
               />
             </div>
 
-            {/* Product Images - UPDATED */}
+            {/* Product Images */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Product Images (at least 4 recommended) *</label>
               <p className="text-xs text-gray-500 mb-2">Enter image URLs for your product photos</p>
