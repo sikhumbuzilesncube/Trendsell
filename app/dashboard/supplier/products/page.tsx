@@ -23,17 +23,10 @@ interface Product {
 export default function SupplierProducts() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
-  const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
     fetchProducts()
-    getCurrentUser()
   }, [])
-
-  const getCurrentUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    setUser(user)
-  }
 
   const fetchProducts = async () => {
     try {
@@ -96,7 +89,7 @@ export default function SupplierProducts() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="container mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-green-700">My Products</h1>
+          <h1 className="text-3xl font-bold text-green-700">📦 My Products</h1>
           <div className="flex gap-4">
             <Link href="/dashboard/supplier/products/new" className="bg-green-700 hover:bg-green-800 text-white font-bold py-2 px-4 rounded-lg transition">
               + Add Product
@@ -120,22 +113,20 @@ export default function SupplierProducts() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {products.map((product) => (
               <div key={product.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition">
-                <div className="h-48 bg-gray-200 flex items-center justify-center">
+                <div className="h-48 bg-gray-200 flex items-center justify-center relative">
                   {product.image_urls && product.image_urls.length > 0 ? (
                     <img src={product.image_urls[0]} alt={product.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="text-6xl">📦</div>
                   )}
+                  {product.verified ? (
+                    <span className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">✅ Verified</span>
+                  ) : (
+                    <span className="absolute top-2 right-2 bg-yellow-500 text-white text-xs px-2 py-1 rounded-full">⏳ Pending</span>
+                  )}
                 </div>
                 <div className="p-4">
-                  <div className="flex items-start justify-between">
-                    <h3 className="font-bold text-lg truncate">{product.name}</h3>
-                    {product.verified ? (
-                      <span className="text-green-500 text-xs">✅ Verified</span>
-                    ) : (
-                      <span className="text-gray-400 text-xs">⏳ Pending</span>
-                    )}
-                  </div>
+                  <h3 className="font-bold text-lg truncate">{product.name}</h3>
                   <p className="text-sm text-gray-500">{product.categories?.name || 'Uncategorized'}</p>
                   <div className="mt-2 flex items-center justify-between">
                     <div>
@@ -157,6 +148,12 @@ export default function SupplierProducts() {
                     >
                       Delete
                     </button>
+                    <Link
+                      href={`/product/${product.id}`}
+                      className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold py-2 px-3 rounded-lg transition text-center"
+                    >
+                      View
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -166,4 +163,4 @@ export default function SupplierProducts() {
       </div>
     </div>
   )
-            }
+    }
